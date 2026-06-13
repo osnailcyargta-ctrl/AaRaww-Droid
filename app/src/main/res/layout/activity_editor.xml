@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0d0d1a">
+
+    <!-- Code Editor -->
+    <EditText
+        android:id="@+id/editorView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#111122"
+        android:textColor="#e0e0ff"
+        android:textColorHint="#444466"
+        android:hint="# Write AarRaw code here..."
+        android:fontFamily="monospace"
+        android:textSize="13sp"
+        android:padding="12dp"
+        android:gravity="top|start"
+        android:inputType="textMultiLine|textNoSuggestions"
+        android:scrollbars="vertical"/>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:background="#7c83ff"/>
+
+    <!-- Terminal Label -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=" TERMINAL"
+        android:textColor="#7c83ff"
+        android:fontFamily="monospace"
+        android:textSize="11sp"
+        android:background="#0a0a18"
+        android:padding="4dp"/>
+
+    <!-- Terminal Output -->
+    <ScrollView
+        android:id="@+id/terminalScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.6"
+        android:background="#0a0a18">
+
+        <TextView
+            android:id="@+id/terminalView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#00ff88"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:padding="10dp"
+            android:lineSpacingExtra="2dp"/>
+
+    </ScrollView>
+
+</LinearLayout>
