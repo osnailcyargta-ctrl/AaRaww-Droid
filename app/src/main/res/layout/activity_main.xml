@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1a1a2e"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="AaRaww Droid"
+        android:textColor="#e0e0ff"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:paddingBottom="8dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="AarRaw Language IDE"
+        android:textColor="#8888cc"
+        android:textSize="14sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:paddingBottom="24dp"/>
+
+    <Button
+        android:id="@+id/btnNewFile"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="+ New .arw File"
+        android:textColor="#1a1a2e"
+        android:backgroundTint="#7c83ff"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp"/>
+
+    <Button
+        android:id="@+id/btnOpenFile"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Open .arw File"
+        android:textColor="#e0e0ff"
+        android:backgroundTint="#2d2d4e"
+        android:layout_marginBottom="24dp"/>
+
+    <TextView
+        android:id="@+id/tvRecentFiles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No .arw files yet"
+        android:textColor="#8888cc"
+        android:fontFamily="monospace"
+        android:textSize="13sp"
+        android:padding="12dp"
+        android:background="#12122a"
+        android:lineSpacingExtra="4dp"/>
+
+</LinearLayout>
