@@ -3,13 +3,14 @@ package com.aaraww.droid
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -25,7 +26,6 @@ class EditorActivity : AppCompatActivity() {
     private lateinit var terminalScroll: ScrollView
 
     private var currentFile: File? = null
-    private var pendingInputCallback: ((String) -> Unit)? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -40,27 +40,18 @@ class EditorActivity : AppCompatActivity() {
         terminalView = findViewById(R.id.terminalView)
         terminalScroll = findViewById(R.id.terminalScroll)
 
-        // Handle file open via intent
+        editorView.typeface = android.graphics.Typeface.MONOSPACE
+        terminalView.typeface = android.graphics.Typeface.MONOSPACE
+
         when {
             intent.getBooleanExtra("NEW_FILE", false) -> {
                 editorView.setText(DEFAULT_TEMPLATE)
                 supportActionBar?.subtitle = "new_file.arw"
             }
-            intent.hasExtra("FILE_URI") -> {
-                val uri = Uri.parse(intent.getStringExtra("FILE_URI"))
-                loadFromUri(uri)
-            }
-            intent.data != null -> {
-                loadFromUri(intent.data!!)
-            }
-            else -> {
-                editorView.setText(DEFAULT_TEMPLATE)
-            }
+            intent.hasExtra("FILE_URI") -> loadFromUri(Uri.parse(intent.getStringExtra("FILE_URI")))
+            intent.data != null -> loadFromUri(intent.data!!)
+            else -> editorView.setText(DEFAULT_TEMPLATE)
         }
-
-        // Syntax highlighting hint (simple monospace)
-        editorView.typeface = android.graphics.Typeface.MONOSPACE
-        terminalView.typeface = android.graphics.Typeface.MONOSPACE
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -82,10 +73,7 @@ class EditorActivity : AppCompatActivity() {
     private fun runCode() {
         val code = editorView.text.toString()
         terminalView.text = "> Running...\n"
-
         val interpreter = AarRawInterpreter()
-
-        // Input handler - shows dialog and waits
         interpreter.inputHandler = { prompt ->
             var result = ""
             val latch = java.util.concurrent.CountDownLatch(1)
@@ -95,24 +83,15 @@ class EditorActivity : AppCompatActivity() {
                 AlertDialog.Builder(this)
                     .setTitle(prompt.ifEmpty { "Input" })
                     .setView(input)
-                    .setPositiveButton("OK") { _, _ ->
-                        result = input.text.toString()
-                        latch.countDown()
-                    }
+                    .setPositiveButton("OK") { _, _ -> result = input.text.toString(); latch.countDown() }
                     .setOnCancelListener { latch.countDown() }
                     .show()
             }
             latch.await()
             result
         }
-
         executor.execute {
-            val output = try {
-                interpreter.interpret(code)
-            } catch (e: Exception) {
-                "[ERROR]: ${e.message}"
-            }
-
+            val output = try { interpreter.interpret(code) } catch (e: Exception) { "[ERROR]: ${e.message}" }
             mainHandler.post {
                 terminalView.text = "> Output:\n$output\n> Done."
                 terminalScroll.post { terminalScroll.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -120,28 +99,32 @@ class EditorActivity : AppCompatActivity() {
         }
     }
 
+    private fun getRawwDir(): File {
+        // Save to /sdcard/raww/ (Environment.getExternalStorageDirectory)
+        val sdcard = Environment.getExternalStorageDirectory()
+        val dir = File(sdcard, "raww")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     private fun saveFile() {
         val file = currentFile
-        if (file == null) {
-            saveFileAs()
-            return
-        }
-        writeToFile(file)
+        if (file == null) saveFileAs() else writeToFile(file)
     }
 
     private fun saveFileAs() {
         val input = EditText(this)
         input.hint = "filename.arw"
-        currentFile?.let { input.setText(it.name) }
+        currentFile?.let { input.setText(it.nameWithoutExtension) }
 
         AlertDialog.Builder(this)
-            .setTitle("Save As")
+            .setTitle("Save to /sdcard/raww/")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 var name = input.text.toString().trim()
+                if (name.isEmpty()) return@setPositiveButton
                 if (!name.endsWith(".arw")) name += ".arw"
-                val dir = getExternalFilesDir(null) ?: filesDir
-                val file = File(dir, name)
+                val file = File(getRawwDir(), name)
                 writeToFile(file)
             }
             .setNegativeButton("Cancel", null)
@@ -150,12 +133,12 @@ class EditorActivity : AppCompatActivity() {
 
     private fun writeToFile(file: File) {
         try {
-            FileOutputStream(file).use { fos ->
-                fos.write(editorView.text.toString().toByteArray())
-            }
+            // Ensure parent dir exists
+            file.parentFile?.mkdirs()
+            FileOutputStream(file).use { it.write(editorView.text.toString().toByteArray()) }
             currentFile = file
             supportActionBar?.subtitle = file.name
-            Toast.makeText(this, "Saved: ${file.name}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Saved to /sdcard/raww/${file.name}", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -163,19 +146,10 @@ class EditorActivity : AppCompatActivity() {
 
     private fun loadFromUri(uri: Uri) {
         try {
-            val stream = contentResolver.openInputStream(uri)
-            val text = stream?.bufferedReader()?.readText() ?: ""
-            stream?.close()
+            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: ""
             editorView.setText(text)
-
-            // Try to get filename
-            val path = uri.lastPathSegment ?: "file.arw"
-            supportActionBar?.subtitle = path
-
-            // If it's a local file, track it
-            if (uri.scheme == "file") {
-                currentFile = File(uri.path ?: "")
-            }
+            supportActionBar?.subtitle = uri.lastPathSegment ?: "file.arw"
+            if (uri.scheme == "file") currentFile = File(uri.path ?: "")
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to open: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -187,7 +161,6 @@ on start:
     print.newline('Hello, World!')
 
 after line.2:
-    end
-""".trimIndent()
+    end"""
     }
 }
