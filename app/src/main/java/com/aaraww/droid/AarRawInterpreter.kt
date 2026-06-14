@@ -1,5 +1,7 @@
 package com.aaraww.droid
 
+import kotlin.random.Random
+
 class AarRawInterpreter {
 
     data class Function(val params: List<String>, val lines: List<String>)
@@ -14,13 +16,15 @@ class AarRawInterpreter {
     private val afterAllBlock = mutableListOf<String>()
     private val onStartBlock = mutableListOf<String>()
 
+    // Callbacks
     var inputHandler: ((prompt: String) -> String)? = null
+    var outputHandler: ((text: String) -> Unit)? = null  // realtime output
+    var delayHandler: ((ms: Long) -> Unit)? = null       // for time.delay
 
     fun interpret(code: String): String {
         reset()
-        val rawLines = code.lines()
-        rawLines.forEach { allLines.add(it) }
-        parseTopLevel(rawLines)
+        code.lines().forEach { allLines.add(it) }
+        parseTopLevel(code.lines())
         if (terminated) return output.toString()
         executeBlock(onStartBlock)
         if (terminated) return output.toString()
@@ -39,6 +43,11 @@ class AarRawInterpreter {
         afterAllBlock.clear(); onStartBlock.clear()
     }
 
+    private fun emit(text: String) {
+        output.append(text)
+        outputHandler?.invoke(text)
+    }
+
     private fun parseTopLevel(lines: List<String>) {
         var i = 0
         while (i < lines.size) {
@@ -48,8 +57,7 @@ class AarRawInterpreter {
                 trimmed == "on start:" -> {
                     i++
                     while (i < lines.size) {
-                        val inner = lines[i]
-                        val t = inner.trim()
+                        val inner = lines[i]; val t = inner.trim()
                         if (t.isEmpty() || t.startsWith("#")) { i++; continue }
                         if (!inner.startsWith(" ") && !inner.startsWith("\t")) break
                         onStartBlock.add(t); i++
@@ -57,11 +65,9 @@ class AarRawInterpreter {
                 }
                 trimmed.matches(Regex("after line\\.\\d+( or line\\.\\d+)*:")) -> {
                     val nums = Regex("\\d+").findAll(trimmed).map { it.value.toInt() }.toList()
-                    val block = mutableListOf<String>()
-                    i++
+                    val block = mutableListOf<String>(); i++
                     while (i < lines.size) {
-                        val inner = lines[i]
-                        val t = inner.trim()
+                        val inner = lines[i]; val t = inner.trim()
                         if (t.isEmpty() || t.startsWith("#")) { i++; continue }
                         if (!inner.startsWith(" ") && !inner.startsWith("\t")) break
                         block.add(t); i++
@@ -71,8 +77,7 @@ class AarRawInterpreter {
                 trimmed == "after.all:" -> {
                     i++
                     while (i < lines.size) {
-                        val inner = lines[i]
-                        val t = inner.trim()
+                        val inner = lines[i]; val t = inner.trim()
                         if (t.isEmpty() || t.startsWith("#")) { i++; continue }
                         if (!inner.startsWith(" ") && !inner.startsWith("\t")) break
                         afterAllBlock.add(t); i++
@@ -83,11 +88,9 @@ class AarRawInterpreter {
                     val funcName = header.substringBefore("(").trim()
                     val paramsStr = header.substringAfter("(").substringBefore(")")
                     val params = if (paramsStr.isBlank()) emptyList() else paramsStr.split(",").map { it.trim() }
-                    val funcLines = mutableListOf<String>()
-                    i++
+                    val funcLines = mutableListOf<String>(); i++
                     while (i < lines.size) {
-                        val inner = lines[i]
-                        val t = inner.trim()
+                        val inner = lines[i]; val t = inner.trim()
                         if (t.isEmpty() || t.startsWith("#")) { i++; continue }
                         if (!inner.startsWith(" ") && !inner.startsWith("\t")) break
                         funcLines.add(t); i++
@@ -101,9 +104,7 @@ class AarRawInterpreter {
 
     private fun executeBlock(lines: List<String>, localVars: MutableMap<String, Any> = mutableMapOf()) {
         var i = 0
-        while (i < lines.size && !terminated) {
-            i = executeStatement(lines, i, localVars)
-        }
+        while (i < lines.size && !terminated) i = executeStatement(lines, i, localVars)
     }
 
     private fun executeStatement(lines: List<String>, index: Int, localVars: MutableMap<String, Any>): Int {
@@ -111,15 +112,30 @@ class AarRawInterpreter {
         if (line.isEmpty() || line.startsWith("#")) return index + 1
         if (line == "end") { terminated = true; return index + 1 }
 
+        // print.newline / print.nextline
         if (line.startsWith("print.newline(") || line.startsWith("print.nextline(")) {
-            output.append(extractArgs(line.substringAfter("(").substringBeforeLast(")"), localVars)).append("\n")
+            emit(extractArgs(line.substringAfter("(").substringBeforeLast(")"), localVars) + "\n")
             return index + 1
         }
+        // print
         if (line.startsWith("print(")) {
-            output.append(extractArgs(line.substringAfter("(").substringBeforeLast(")"), localVars))
+            emit(extractArgs(line.substringAfter("(").substringBeforeLast(")"), localVars))
             return index + 1
         }
 
+        // time.delay(ms or var\ "name")
+        if (line.startsWith("time.delay(")) {
+            val arg = line.substringAfter("time.delay(").substringBeforeLast(")").trim()
+            val ms = toDouble(evalExpr(arg, localVars))?.toLong() ?: 0L
+            delayHandler?.invoke(ms) ?: Thread.sleep(ms)
+            return index + 1
+        }
+
+        // random.pick(a, b) -> random int between a and b inclusive
+        // used as assignment: "var" = random.pick(1, 10)
+        // handled inside evalExpr, so just fall through to assignment
+
+        // function.call
         if (line.startsWith("function.call ")) {
             val call = line.removePrefix("function.call ").trim()
             val funcName = call.substringBefore("(").trim()
@@ -135,27 +151,30 @@ class AarRawInterpreter {
             return index + 1
         }
 
+        // input.var\ "name"('prompt')
         if (line.startsWith("input.var\\")) {
             val rest = line.removePrefix("input.var\\").trim()
             val varName = rest.substringAfter("\"").substringBefore("\"")
             val promptRaw = rest.substringAfter("(")
             val prompt = promptRaw.substringAfter("'").substringBeforeLast("'")
                 .ifEmpty { promptRaw.substringAfter("\"").substringBeforeLast("\"") }
-            setVar(varName, inputHandler?.invoke(prompt) ?: "", localVars)
+            // Emit prompt first
+            emit(prompt)
+            val inputVal = inputHandler?.invoke(prompt) ?: ""
+            // Echo input to terminal
+            emit(inputVal + "\n")
+            setVar(varName, inputVal, localVars)
             return index + 1
         }
 
         // if / elif / else
-        if (line.startsWith("if ") && line.endsWith(":")) {
-            return executeIfChain(lines, index, localVars)
-        }
+        if (line.startsWith("if ") && line.endsWith(":")) return executeIfChain(lines, index, localVars)
 
         // while
         if (line.startsWith("while ") && line.endsWith(":")) {
             val condition = line.removePrefix("while ").removeSuffix(":")
             val whileBlock = mutableListOf<String>()
-            var i = index + 1
-            var depth = 0
+            var i = index + 1; var depth = 0
             while (i < lines.size) {
                 val l = lines[i].trim()
                 if (l.isEmpty() || l.startsWith("#")) { i++; continue }
@@ -167,16 +186,18 @@ class AarRawInterpreter {
             var safety = 0
             while (evalCondition(condition, localVars) && !terminated) {
                 executeBlock(whileBlock, localVars)
-                if (++safety > 10000) { output.append("[ERROR: loop limit]\n"); break }
+                if (++safety > 100000) { emit("[ERROR: loop limit]\n"); break }
             }
             return i
         }
 
+        // "var" = expr
         val assignMatch = Regex("^\"([^\"]+)\"\\s*=\\s*(.+)$").find(line)
         if (assignMatch != null) {
             setVar(assignMatch.groupValues[1], evalExpr(assignMatch.groupValues[2].trim(), localVars), localVars)
             return index + 1
         }
+        // plain = expr
         val plainAssign = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*(.+)$").find(line)
         if (plainAssign != null) {
             localVars[plainAssign.groupValues[1]] = evalExpr(plainAssign.groupValues[2].trim(), localVars)
@@ -186,63 +207,37 @@ class AarRawInterpreter {
         return index + 1
     }
 
-    // Handles if / elif* / else chain
     private fun executeIfChain(lines: List<String>, index: Int, localVars: MutableMap<String, Any>): Int {
-        // Parse all branches: list of Pair(condition|null, block)
-        // condition == null means else
         data class Branch(val condition: String?, val block: MutableList<String>)
         val branches = mutableListOf<Branch>()
-
         var i = index
         while (i < lines.size) {
             val l = lines[i].trim()
             val isIf = l.startsWith("if ") && l.endsWith(":")
             val isElif = l.startsWith("elif ") && l.endsWith(":")
             val isElse = l == "else:"
-
             if (!isIf && !isElif && !isElse) break
-
-            val condition = when {
-                isIf -> l.removePrefix("if ").removeSuffix(":")
-                isElif -> l.removePrefix("elif ").removeSuffix(":")
-                else -> null
-            }
-
-            val block = mutableListOf<String>()
-            i++
-            var depth = 0
-
+            val condition = when { isIf -> l.removePrefix("if ").removeSuffix(":"); isElif -> l.removePrefix("elif ").removeSuffix(":"); else -> null }
+            val block = mutableListOf<String>(); i++; var depth = 0
             while (i < lines.size) {
                 val bl = lines[i].trim()
                 if (bl.isEmpty() || bl.startsWith("#")) { i++; continue }
-
-                // Stop collecting this branch if we hit elif/else at depth 0
                 if (depth == 0 && (bl.startsWith("elif ") || bl == "else:")) break
-                // Stop if we hit something that's a new top-level block header (not nested)
-                if (depth == 0 && isBlockStart(bl) && !bl.startsWith("if ") && !bl.startsWith("elif") && !bl.startsWith("while")) break
-
                 if (isBlockStart(bl)) depth++
                 if (bl == "end" && depth == 0) { block.add(bl); i++; break }
                 if (isBlockEnd(bl) && depth > 0) depth--
                 block.add(bl); i++
             }
-
             branches.add(Branch(condition, block))
             if (isElse) break
         }
-
-        // Execute first matching branch
         var executed = false
         for (branch in branches) {
             if (!executed) {
                 val matches = if (branch.condition == null) true else evalCondition(branch.condition, localVars)
-                if (matches) {
-                    executeBlock(branch.block, localVars)
-                    executed = true
-                }
+                if (matches) { executeBlock(branch.block, localVars); executed = true }
             }
         }
-
         return i
     }
 
@@ -255,37 +250,38 @@ class AarRawInterpreter {
         if (t == "false") return false
         if (t.contains(" and ")) return t.split(" and ").all { evalCondition(it.trim(), localVars) }
         if (t.contains(" or ")) return t.split(" or ").any { evalCondition(it.trim(), localVars) }
-
         val varRef = Regex("\\(var\\\\\\s*\"([^\"]+)\"\\)\\s*(==|!=|>=|<=|>|<)\\s*(.+)").find(t)
-        if (varRef != null) {
-            return compare(getVar(varRef.groupValues[1], localVars), varRef.groupValues[2], evalExpr(varRef.groupValues[3].trim(), localVars))
-        }
+        if (varRef != null) return compare(getVar(varRef.groupValues[1], localVars), varRef.groupValues[2], evalExpr(varRef.groupValues[3].trim(), localVars))
         val plain = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$").find(t)
-        if (plain != null) {
-            return compare(localVars[plain.groupValues[1]] ?: variables[plain.groupValues[1]] ?: "", plain.groupValues[2], evalExpr(plain.groupValues[3].trim(), localVars))
-        }
+        if (plain != null) return compare(localVars[plain.groupValues[1]] ?: variables[plain.groupValues[1]] ?: "", plain.groupValues[2], evalExpr(plain.groupValues[3].trim(), localVars))
         return false
     }
 
     private fun compare(left: Any, op: String, right: Any): Boolean {
         val l = toDouble(left); val r = toDouble(right)
-        if (l != null && r != null) return when (op) {
-            "==" -> l == r; "!=" -> l != r; ">=" -> l >= r
-            "<=" -> l <= r; ">" -> l > r; "<" -> l < r; else -> false
-        }
+        if (l != null && r != null) return when (op) { "==" -> l == r; "!=" -> l != r; ">=" -> l >= r; "<=" -> l <= r; ">" -> l > r; "<" -> l < r; else -> false }
         return when (op) { "==" -> left.toString() == right.toString(); "!=" -> left.toString() != right.toString(); else -> false }
     }
 
     private fun toDouble(v: Any): Double? = when (v) {
-        is Double -> v; is Int -> v.toDouble(); is Long -> v.toDouble()
-        is String -> v.toDoubleOrNull(); else -> null
+        is Double -> v; is Int -> v.toDouble(); is Long -> v.toDouble(); is String -> v.toDoubleOrNull(); else -> null
     }
 
     private fun evalExpr(expr: String, localVars: MutableMap<String, Any>): Any {
         val t = expr.trim()
-        if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith("\"") && t.endsWith("\"")))
-            return t.substring(1, t.length - 1)
+        if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith("\"") && t.endsWith("\""))) return t.substring(1, t.length - 1)
         t.toDoubleOrNull()?.let { return if (it == kotlin.math.floor(it)) it.toLong() else it }
+
+        // random.pick(a, b)
+        if (t.startsWith("random.pick(") && t.endsWith(")")) {
+            val args = t.substringAfter("random.pick(").substringBeforeLast(")")
+            val parts = args.split(",").map { evalExpr(it.trim(), localVars) }
+            if (parts.size >= 2) {
+                val a = toDouble(parts[0])?.toInt() ?: 0
+                val b = toDouble(parts[1])?.toInt() ?: 1
+                return Random.nextInt(minOf(a, b), maxOf(a, b) + 1).toLong()
+            }
+        }
 
         Regex("\\(var\\\\\\s*\"([^\"]+)\"\\)").find(t)?.let { return getVar(it.groupValues[1], localVars) }
         Regex("^var\\\\\\s*\"([^\"]+)\"$").find(t)?.let { return getVar(it.groupValues[1], localVars) }
