@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0a0a18">
+
+    <!-- Title bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="#111133"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="▶ AaRaww Terminal"
+            android:textColor="#7c83ff"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btnClose"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="✕ Close"
+            android:textColor="#ff6b6b"
+            android:backgroundTint="#1a0a0a"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"/>
+    </LinearLayout>
+
+    <!-- Terminal output -->
+    <ScrollView
+        android:id="@+id/termScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#0a0a18"
+        android:padding="0dp">
+
+        <TextView
+            android:id="@+id/termOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#00ff88"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:lineSpacingExtra="3dp"
+            android:text=""/>
+    </ScrollView>
+
+    <!-- Input bar -->
+    <LinearLayout
+        android:id="@+id/inputBar"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="#0f0f2a"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/inputPrompt"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="> "
+            android:textColor="#7c83ff"
+            android:fontFamily="monospace"
+            android:textSize="14sp"/>
+
+        <EditText
+            android:id="@+id/inputField"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:textColor="#ffffff"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:inputType="text|textNoSuggestions"
+            android:imeOptions="actionDone"
+            android:hint="type here..."
+            android:textColorHint="#333355"
+            android:singleLine="true"/>
+
+        <Button
+            android:id="@+id/btnSend"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="↵"
+            android:textColor="#0a0a18"
+            android:backgroundTint="#7c83ff"
+            android:textSize="16sp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"/>
+    </LinearLayout>
+
+</LinearLayout>
