@@ -1,33 +1,25 @@
 package com.aaraww.droid
 
-import android.app.AlertDialog
-import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.Executors
 
 class EditorActivity : AppCompatActivity() {
 
     private lateinit var editorView: EditText
     private lateinit var terminalView: TextView
     private lateinit var terminalScroll: ScrollView
-
     private var currentFile: File? = null
-    private val executor = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,35 +64,11 @@ class EditorActivity : AppCompatActivity() {
 
     private fun runCode() {
         val code = editorView.text.toString()
-        terminalView.text = "> Running...\n"
-        val interpreter = AarRawInterpreter()
-        interpreter.inputHandler = { prompt ->
-            var result = ""
-            val latch = java.util.concurrent.CountDownLatch(1)
-            mainHandler.post {
-                val input = EditText(this)
-                input.hint = "Enter input..."
-                AlertDialog.Builder(this)
-                    .setTitle(prompt.ifEmpty { "Input" })
-                    .setView(input)
-                    .setPositiveButton("OK") { _, _ -> result = input.text.toString(); latch.countDown() }
-                    .setOnCancelListener { latch.countDown() }
-                    .show()
-            }
-            latch.await()
-            result
-        }
-        executor.execute {
-            val output = try { interpreter.interpret(code) } catch (e: Exception) { "[ERROR]: ${e.message}" }
-            mainHandler.post {
-                terminalView.text = "> Output:\n$output\n> Done."
-                terminalScroll.post { terminalScroll.fullScroll(ScrollView.FOCUS_DOWN) }
-            }
-        }
+        // Buka terminal popup fullscreen
+        TerminalDialog(this, code).show()
     }
 
     private fun getRawwDir(): File {
-        // Save to /sdcard/raww/ (Environment.getExternalStorageDirectory)
         val sdcard = Environment.getExternalStorageDirectory()
         val dir = File(sdcard, "raww")
         if (!dir.exists()) dir.mkdirs()
@@ -108,15 +76,13 @@ class EditorActivity : AppCompatActivity() {
     }
 
     private fun saveFile() {
-        val file = currentFile
-        if (file == null) saveFileAs() else writeToFile(file)
+        currentFile?.let { writeToFile(it) } ?: saveFileAs()
     }
 
     private fun saveFileAs() {
         val input = EditText(this)
         input.hint = "filename.arw"
         currentFile?.let { input.setText(it.nameWithoutExtension) }
-
         AlertDialog.Builder(this)
             .setTitle("Save to /sdcard/raww/")
             .setView(input)
@@ -124,8 +90,7 @@ class EditorActivity : AppCompatActivity() {
                 var name = input.text.toString().trim()
                 if (name.isEmpty()) return@setPositiveButton
                 if (!name.endsWith(".arw")) name += ".arw"
-                val file = File(getRawwDir(), name)
-                writeToFile(file)
+                writeToFile(File(getRawwDir(), name))
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -133,12 +98,11 @@ class EditorActivity : AppCompatActivity() {
 
     private fun writeToFile(file: File) {
         try {
-            // Ensure parent dir exists
             file.parentFile?.mkdirs()
             FileOutputStream(file).use { it.write(editorView.text.toString().toByteArray()) }
             currentFile = file
             supportActionBar?.subtitle = file.name
-            Toast.makeText(this, "Saved to /sdcard/raww/${file.name}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Saved: /sdcard/raww/${file.name}", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
